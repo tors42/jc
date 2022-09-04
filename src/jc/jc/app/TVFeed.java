@@ -54,13 +54,13 @@ public interface TVFeed {
                     case JCNewGame game     -> new State(game.white(), game.black(), game.board(), game.flipped());
                     case JCBoardUpdate move -> currentState != null ?
                         currentState.withBoard(move.board())
-                        .withWhite(currentState.white().withSeconds(move.whiteSeconds()))
-                        .withBlack(currentState.black().withSeconds(move.blackSeconds())) :
+                        .withWhiteSeconds(move.whiteSeconds())
+                        .withBlackSeconds(move.blackSeconds()) :
                         currentState;
                     case JCTimeTick tick    -> (currentState != null && !currentState.board().ended()) ?
                         currentState.board().whiteToMove() ?
-                        currentState.withWhite(currentState.white().withSeconds(currentState.white().syntheticSeconds()-1)) :
-                        currentState.withBlack(currentState.black().withSeconds(currentState.black().syntheticSeconds()-1)) :
+                        currentState.withWhiteSeconds(currentState.white().syntheticSeconds()-1) :
+                        currentState.withBlackSeconds(currentState.black().syntheticSeconds()-1) :
                         currentState;
                 };
 
@@ -103,8 +103,8 @@ public interface TVFeed {
                  flipped);
         }
 
-        public State withWhite(JCPlayerAndClock white) { return new State(white, black, board, flipped); }
-        public State withBlack(JCPlayerAndClock black) { return new State(white, black, board, flipped); }
+        public State withWhiteSeconds(int seconds) { return new State(white.withSeconds(seconds), black, board, flipped); }
+        public State withBlackSeconds(int seconds) { return new State(white, black.withSeconds(seconds), board, flipped); }
 
         public State withWhite(PlayerInfo white) { return new State(new JCPlayerAndClock(white, white.seconds()), black, board, flipped); }
         public State withBlack(PlayerInfo black) { return new State(white, new JCPlayerAndClock(black, black.seconds()), board, flipped); }
