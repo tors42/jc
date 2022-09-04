@@ -1,0 +1,3 @@
+module jc {
+    requires chariot;
+}
