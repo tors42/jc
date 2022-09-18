@@ -44,13 +44,29 @@ public interface TVFeed {
     }
 
     static TVFeed classicalGame(Consumer<String> consumer) {
-        BlockingQueue<JCEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         TVChannels tvchannels = client.games().tvChannels().get();
         TVChannels.TVChannel classical = tvchannels.classical();
         String gameId = classical.gameId();
 
         return gameId(gameId, consumer);
     }
+
+    static TVFeed rapidGame(Consumer<String> consumer) {
+        TVChannels tvchannels = client.games().tvChannels().get();
+        TVChannels.TVChannel rapid = tvchannels.rapid();
+        String gameId = rapid.gameId();
+
+        return gameId(gameId, consumer);
+    }
+
+    static TVFeed blitzGame(Consumer<String> consumer) {
+        TVChannels tvchannels = client.games().tvChannels().get();
+        TVChannels.TVChannel blitz = tvchannels.blitz();
+        String gameId = blitz.gameId();
+
+        return gameId(gameId, consumer);
+    }
+
 
     static TVFeed gameId(String gameId, Consumer<String> consumer) {
         BlockingQueue<JCEvent> eventQueue = new ArrayBlockingQueue<>(1024);
@@ -62,27 +78,16 @@ public interface TVFeed {
                 .forEach(moveInfo -> {
                     switch(moveInfo) {
                         case MoveInfo.GameSummary summary -> {
-                            GameUser whiteGameUser = game.players().white();
-                            GameUser blackGameUser = game.players().black();
-                            PlayerInfo white = new PlayerInfo(
-                                    new LightUser(
-                                        whiteGameUser.name(),
-                                        whiteGameUser.name(),
-                                        "",
-                                        false),
-                                    Color.white,
-                                    0,
-                                    0);
-                            PlayerInfo black = new PlayerInfo(
-                                    new LightUser(
-                                        blackGameUser.name(),
-                                        blackGameUser.name(),
-                                        "",
-                                        false),
-                                    Color.black,
-                                    0,
-                                    0);
-                            Board board = Board.fromFEN(summary.fen());
+                            var white = switch(game.players().white()) {
+                                case GameUser.User user -> new PlayerInfo(user.user(), Color.white, user.rating(), 0);
+                                default -> new PlayerInfo(new LightUser("", game.players().white().name(), "", false), Color.white, 0, 0);
+                            };
+                            var black = switch(game.players().black()) {
+                                case GameUser.User user -> new PlayerInfo(user.user(), Color.black, user.rating(), 0);
+                                default -> new PlayerInfo(new LightUser("", game.players().black().name(), "", false), Color.black, 0, 0);
+                            };
+
+                            var board = Board.fromFEN(summary.fen());
                             eventQueue.offer(new JCNewGame(white, black, board, false));
                         }
                         case MoveInfo.Move move -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(move.fen()), move.wc(), move.bc()));
