@@ -6,7 +6,9 @@ class Main {
 
     public static void main(String[] args) {
 
-        TVFeed tvFeed = TVFeed.startConsole(System.out::println);
+        //TVFeed tvFeed = TVFeed.gameId("IXVqbsOP", System.out::println);
+        //TVFeed tvFeed = TVFeed.classicalGame(System.out::println);
+        TVFeed tvFeed = TVFeed.featuredGame(System.out::println);
 
         System.console().readLine();
 
