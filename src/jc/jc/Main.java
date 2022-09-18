@@ -6,9 +6,8 @@ class Main {
 
     public static void main(String[] args) {
 
-        TVFeed tvFeed = TVFeed.startConsole();
+        TVFeed tvFeed = TVFeed.startConsole(System.out::println);
 
-        // Block until user hits Enter
         System.console().readLine();
 
         tvFeed.stop();

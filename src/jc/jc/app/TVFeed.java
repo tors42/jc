@@ -2,8 +2,8 @@ package jc.app;
 
 import java.time.Duration;
 import java.util.concurrent.*;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
+import java.util.function.*;
+import java.util.stream.*;
 
 import chariot.Client;
 import chariot.model.Enums.Color;
@@ -14,8 +14,7 @@ public interface TVFeed {
 
     void stop();
 
-    static TVFeed startConsole() {
-        Consumer<State> renderer = new ConsoleRenderer();
+    static TVFeed startConsole(Consumer<String> consumer) {
         BlockingQueue<JCEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         ScheduledExecutorService timeTickerExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -65,15 +64,14 @@ public interface TVFeed {
                 };
 
                 if (currentState != null) {
-                    renderer.accept(currentState);
+                    consumer.accept(render(currentState));
                 }
             }
         });
-        return new Feed(renderer, executorService, timeTickerExecutor, stream);
+        return new Feed(executorService, timeTickerExecutor, stream);
     }
 
     record Feed(
-            Consumer<State> renderer,
             ExecutorService executorService,
             ScheduledExecutorService timeTickerExecutor,
             Stream<?> stream) implements TVFeed {
@@ -111,43 +109,42 @@ public interface TVFeed {
         public State withBoard(Board board) { return new State(white, black, board, flipped); }
     }
 
-    record ConsoleRenderer() implements Consumer<State> {
 
-        @Override
-        public void accept(State state) {
-            var upperPlayer = state.flipped() ? state.white() : state.black();
-            var lowerPlayer = state.flipped() ? state.black() : state.white();
-            String upperTitle = upperPlayer.info().user().title().isEmpty() ? "" : upperPlayer.info().user().title() + " ";
-            String upperName =  upperPlayer.info().user().name();
-            String upperClock = formatSeconds(upperPlayer.syntheticSeconds());
-            String upperToMove = (state.flipped() && state.board().whiteToMove()) ||
-                (!state.flipped() && state.board().blackToMove()) ? "*" : "";
-            String board = state.flipped() ? state.board().toString(c -> c.frame().flipped()) :
-                state.board().toString(c -> c.frame());
-            String lowerToMove = (state.flipped() && state.board().blackToMove()) ||
-                (!state.flipped() && state.board().whiteToMove()) ? "*" : "";
-            String lowerClock = formatSeconds(lowerPlayer.syntheticSeconds());
-            String lowerTitle = lowerPlayer.info().user().title().isEmpty() ? "" : lowerPlayer.info().user().title() + " ";
-            String lowerName = lowerPlayer.info().user().name();
+    static String render(State state) {
 
-            System.out.print("""
-                    %s%s
-                    %s %s
-                    %s
-                    %s %s
-                    %s%s
-                    """.formatted(
-                        upperTitle, upperName,
-                        upperClock, upperToMove,
-                        board,
-                        lowerClock, lowerToMove,
-                        lowerTitle, lowerName
-                        ));
-        }
+        var upperPlayer = state.flipped() ? state.white() : state.black();
+        var lowerPlayer = state.flipped() ? state.black() : state.white();
+        String upperTitle = upperPlayer.info().user().title().isEmpty() ? "" : upperPlayer.info().user().title() + " ";
+        String upperName =  upperPlayer.info().user().name();
+        String upperClock = formatSeconds(upperPlayer.syntheticSeconds());
+        String upperToMove = (state.flipped() && state.board().whiteToMove()) ||
+            (!state.flipped() && state.board().blackToMove()) ? "*" : "";
+        String board = state.flipped() ? state.board().toString(c -> c.frame().flipped()) :
+            state.board().toString(c -> c.frame());
+        String lowerToMove = (state.flipped() && state.board().blackToMove()) ||
+            (!state.flipped() && state.board().whiteToMove()) ? "*" : "";
+        String lowerClock = formatSeconds(lowerPlayer.syntheticSeconds());
+        String lowerTitle = lowerPlayer.info().user().title().isEmpty() ? "" : lowerPlayer.info().user().title() + " ";
+        String lowerName = lowerPlayer.info().user().name();
 
-        static String formatSeconds(int seconds) {
-            Duration duration = Duration.ofSeconds(seconds);
-            return String.format("%d:%02d:%02d", duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart());
-        }
+        String rendered = """
+            %s%s
+            %s %s
+            %s
+            %s %s
+            %s%s
+            """.formatted(
+                    upperTitle, upperName,
+                    upperClock, upperToMove,
+                    board,
+                    lowerClock, lowerToMove,
+                    lowerTitle, lowerName
+                    );
+        return rendered;
+    }
+
+    static String formatSeconds(int seconds) {
+        Duration duration = Duration.ofSeconds(seconds);
+        return String.format("%d:%02d:%02d", duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart());
     }
 }
