@@ -28,15 +28,17 @@ public interface TVFeed {
         Runnable runnable = () -> stream
                 .forEach(tvFeedEvent -> {
                     switch(tvFeedEvent.d()) {
-                        case Featured featured -> {
-                            PlayerInfo p1 = featured.players().get(0);
-                            PlayerInfo p2 = featured.players().get(1);
-                            PlayerInfo white = p1.color() == Color.white ? p1 : p2;
-                            PlayerInfo black = white == p1 ? p2 : p1;
-                            Board board = Board.fromFEN(featured.fen());
-                            eventQueue.offer(new JCNewGame(white, black, board, featured.orientation() != Color.white));
+                        case Featured(String id, Color orientation, var players, String fen) -> {
+                            record PlayerColors(PlayerInfo white, PlayerInfo black) {}
+                            var playerColors = switch(players.get(0).color()) {
+                                case white -> new PlayerColors(players.get(0), players.get(1));
+                                case black -> new PlayerColors(players.get(1), players.get(0));
+                            };
+                            Board board = Board.fromFEN(fen);
+                            eventQueue.offer(new JCNewGame(playerColors.white, playerColors.black, board, orientation != Color.white));
                         }
-                        case Fen fen -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen.fen()), fen.wc(), fen.bc()));
+                        case Fen(String fen, String lm, Integer wc, Integer bc) ->
+                            eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
                     }
                 });
 
@@ -118,13 +120,13 @@ public interface TVFeed {
                 }
 
                 currentState = switch(event) {
-                    case JCNewGame game     -> new State(game.white(), game.black(), game.board(), game.flipped());
-                    case JCBoardUpdate move -> currentState != null ?
-                        currentState.withBoard(move.board())
-                        .withWhiteSeconds(move.whiteSeconds())
-                        .withBlackSeconds(move.blackSeconds()) :
+                    case JCNewGame(var white, var black, var board, var flipped) -> new State(white, black, board, flipped);
+                    case JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) -> currentState != null ?
+                        currentState.withBoard(board)
+                        .withWhiteSeconds(whiteSeconds)
+                        .withBlackSeconds(blackSeconds) :
                         currentState;
-                    case JCTimeTick tick    -> (currentState != null && !currentState.board().ended()) ?
+                    case JCTimeTick() -> (currentState != null && !currentState.board().ended()) ?
                         currentState.board().whiteToMove() ?
                         currentState.withWhiteSeconds(currentState.white().syntheticSeconds()-1) :
                         currentState.withBlackSeconds(currentState.black().syntheticSeconds()-1) :
