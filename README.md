@@ -28,7 +28,7 @@ _Hint, manually resize the terminal so only the newest lines showing the newest 
 
 # Build
 
-Uses Java 18
+Uses Java 19
 
     mvn clean install
 
