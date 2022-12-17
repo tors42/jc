@@ -6,11 +6,7 @@ import java.util.function.*;
 import java.util.stream.*;
 
 import chariot.Client;
-import chariot.model.GameUser;
-import chariot.model.LightUser;
-import chariot.model.MoveInfo;
-import chariot.model.TVChannels;
-import chariot.model.TVFeedEvent;
+import chariot.model.*;
 import chariot.model.Enums.Color;
 import chariot.model.TVFeedEvent.*;
 import chariot.util.Board;
