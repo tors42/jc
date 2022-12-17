@@ -1,6 +1,9 @@
 package jc.app;
 
-import java.time.Duration;
+import jc.model.JCState;
+import jc.model.JCState.JCPlayerInfo;
+import jc.model.JCState.JCUser;
+
 import java.util.concurrent.*;
 import java.util.function.*;
 import java.util.stream.*;
@@ -18,7 +21,7 @@ public interface TVFeed {
     void stop();
 
     static TVFeed featuredGame(Consumer<String> consumer) {
-        BlockingQueue<JCEvent> eventQueue = new ArrayBlockingQueue<>(1024);
+        BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         var stream = client.games().tvFeed().stream();
 
         Runnable runnable = () -> stream
@@ -31,7 +34,7 @@ public interface TVFeed {
                                 case black -> new PlayerColors(players.get(1), players.get(0));
                             };
                             Board board = Board.fromFEN(fen);
-                            eventQueue.offer(new JCNewGame(playerColors.white, playerColors.black, board, orientation != Color.white));
+                            eventQueue.offer(new JCNewGame(fromPlayerInfo(playerColors.white), fromPlayerInfo(playerColors.black), board, orientation != Color.white));
                         }
                         case Fen(String fen, String lm, Integer wc, Integer bc) ->
                             eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
@@ -39,6 +42,11 @@ public interface TVFeed {
                 });
 
         return watch(consumer, stream, runnable, eventQueue);
+    }
+
+    private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
+        JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().title());
+        return new JCPlayerInfo(user, playerInfo.seconds());
     }
 
     static TVFeed classicalGame(Consumer<String> consumer) {
@@ -67,7 +75,7 @@ public interface TVFeed {
 
 
     static TVFeed gameId(String gameId, Consumer<String> consumer) {
-        BlockingQueue<JCEvent> eventQueue = new ArrayBlockingQueue<>(1024);
+        BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         var game = client.games().byGameId(gameId).get();
 
         var stream = client.games().moveInfosByGameId(gameId).stream();
@@ -86,7 +94,7 @@ public interface TVFeed {
                             };
 
                             var board = Board.fromFEN(summary.fen());
-                            eventQueue.offer(new JCNewGame(white, black, board, false));
+                            eventQueue.offer(new JCNewGame(fromPlayerInfo(white), fromPlayerInfo(black), board, false));
                         }
                         case MoveInfo.Move move -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(move.fen()), move.wc(), move.bc()));
                     }
@@ -95,7 +103,7 @@ public interface TVFeed {
         return watch(consumer, stream, runnable, eventQueue);
     }
 
-    private static TVFeed watch(Consumer<String> consumer, Stream<?> stream, Runnable runnable, BlockingQueue<JCEvent> eventQueue) {
+    private static TVFeed watch(Consumer<String> consumer, Stream<?> stream, Runnable runnable, BlockingQueue<FeedEvent> eventQueue) {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         ScheduledExecutorService timeTickerExecutor = Executors.newSingleThreadScheduledExecutor();
         executorService.submit(runnable);
@@ -105,9 +113,9 @@ public interface TVFeed {
                 0, 1, TimeUnit.SECONDS);
 
         executorService.submit(() -> {
-            State currentState = null;
+            JCState currentState = null;
             while(true) {
-                final JCEvent event;
+                final FeedEvent event;
                 try {
                     event = eventQueue.take();
                 } catch(InterruptedException ie) {
@@ -116,7 +124,7 @@ public interface TVFeed {
                 }
 
                 currentState = switch(event) {
-                    case JCNewGame(var white, var black, var board, var flipped) -> new State(white, black, board, flipped);
+                    case JCNewGame(var white, var black, var board, var flipped) -> new JCState(white, black, board, flipped);
                     case JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) -> currentState != null ?
                         currentState.withBoard(board)
                         .withWhiteSeconds(whiteSeconds)
@@ -130,7 +138,7 @@ public interface TVFeed {
                 };
 
                 if (currentState != null) {
-                    consumer.accept(render(currentState));
+                    consumer.accept(JCState.render(currentState));
                 }
             }
         });
@@ -149,68 +157,12 @@ public interface TVFeed {
         }
     }
 
-    sealed interface JCEvent {}
+    sealed interface FeedEvent {}
 
-    record JCNewGame(PlayerInfo white, PlayerInfo black, Board board, boolean flipped) implements JCEvent {};
-    record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) implements JCEvent {};
-    record JCTimeTick() implements JCEvent {};
-
-    record JCPlayerAndClock(PlayerInfo info, int syntheticSeconds) {
-        public JCPlayerAndClock withSeconds(int syntheticSeconds) { return new JCPlayerAndClock(info, syntheticSeconds); }
-    }
-
-    record State(JCPlayerAndClock white, JCPlayerAndClock black, Board board, boolean flipped) {
-        public State(PlayerInfo infoWhite, PlayerInfo infoBlack, Board board, boolean flipped) {
-            this(new JCPlayerAndClock(infoWhite, infoWhite.seconds()),
-                 new JCPlayerAndClock(infoBlack, infoBlack.seconds()),
-                 board,
-                 flipped);
-        }
-
-        public State withWhiteSeconds(int seconds) { return new State(white.withSeconds(seconds), black, board, flipped); }
-        public State withBlackSeconds(int seconds) { return new State(white, black.withSeconds(seconds), board, flipped); }
-
-        public State withWhite(PlayerInfo white) { return new State(new JCPlayerAndClock(white, white.seconds()), black, board, flipped); }
-        public State withBlack(PlayerInfo black) { return new State(white, new JCPlayerAndClock(black, black.seconds()), board, flipped); }
-        public State withBoard(Board board) { return new State(white, black, board, flipped); }
-    }
+    record JCNewGame(JCPlayerInfo white, JCPlayerInfo black, Board board, boolean flipped) implements FeedEvent {};
+    record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) implements FeedEvent {};
+    record JCTimeTick() implements FeedEvent {};
 
 
-    static String render(State state) {
 
-        var upperPlayer = state.flipped() ? state.white() : state.black();
-        var lowerPlayer = state.flipped() ? state.black() : state.white();
-        String upperTitle = upperPlayer.info().user().title().isEmpty() ? "" : upperPlayer.info().user().title() + " ";
-        String upperName =  upperPlayer.info().user().name();
-        String upperClock = formatSeconds(upperPlayer.syntheticSeconds());
-        String upperToMove = (state.flipped() && state.board().whiteToMove()) ||
-            (!state.flipped() && state.board().blackToMove()) ? "*" : "";
-        String board = state.flipped() ? state.board().toString(c -> c.frame().flipped()) :
-            state.board().toString(c -> c.frame());
-        String lowerToMove = (state.flipped() && state.board().blackToMove()) ||
-            (!state.flipped() && state.board().whiteToMove()) ? "*" : "";
-        String lowerClock = formatSeconds(lowerPlayer.syntheticSeconds());
-        String lowerTitle = lowerPlayer.info().user().title().isEmpty() ? "" : lowerPlayer.info().user().title() + " ";
-        String lowerName = lowerPlayer.info().user().name();
-
-        String rendered = """
-            %s%s
-            %s %s
-            %s
-            %s %s
-            %s%s
-            """.formatted(
-                    upperTitle, upperName,
-                    upperClock, upperToMove,
-                    board,
-                    lowerClock, lowerToMove,
-                    lowerTitle, lowerName
-                    );
-        return rendered;
-    }
-
-    static String formatSeconds(int seconds) {
-        Duration duration = Duration.ofSeconds(seconds);
-        return String.format("%d:%02d:%02d", duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart());
-    }
 }
