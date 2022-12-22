@@ -1,8 +1,7 @@
 package jc.app;
 
 import jc.model.JCState;
-import jc.model.JCState.JCPlayerInfo;
-import jc.model.JCState.JCUser;
+import jc.model.JCState.*;
 
 import java.util.concurrent.*;
 import java.util.function.*;
@@ -11,6 +10,7 @@ import java.util.stream.*;
 import chariot.Client;
 import chariot.model.*;
 import chariot.model.Enums.Color;
+import chariot.model.MoveInfo.*;
 import chariot.model.TVFeedEvent.*;
 import chariot.util.Board;
 
@@ -27,17 +27,15 @@ public interface TVFeed {
         Runnable runnable = () -> stream
                 .forEach(tvFeedEvent -> {
                     switch(tvFeedEvent.d()) {
-                        case Featured(String id, Color orientation, var players, String fen) -> {
+                        case Fen(String fen, var lm, var wc, var bc) -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
+                        case Featured(var id, Color orientation, var players, String fen) -> {
                             record PlayerColors(PlayerInfo white, PlayerInfo black) {}
                             var playerColors = switch(players.get(0).color()) {
                                 case white -> new PlayerColors(players.get(0), players.get(1));
                                 case black -> new PlayerColors(players.get(1), players.get(0));
                             };
-                            Board board = Board.fromFEN(fen);
-                            eventQueue.offer(new JCNewGame(fromPlayerInfo(playerColors.white), fromPlayerInfo(playerColors.black), board, orientation != Color.white));
+                            eventQueue.offer(new JCNewGame(fromPlayerInfo(playerColors.white), fromPlayerInfo(playerColors.black), Board.fromFEN(fen), orientation != Color.white));
                         }
-                        case Fen(String fen, String lm, Integer wc, Integer bc) ->
-                            eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
                     }
                 });
 
@@ -73,7 +71,8 @@ public interface TVFeed {
         Runnable runnable = () -> stream
                 .forEach(moveInfo -> {
                     switch(moveInfo) {
-                        case MoveInfo.GameSummary summary -> {
+                        case Move(String fen, var lm, int wc, int bc) -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
+                        case GameSummary summary -> {
                             var white = switch(game.players().white()) {
                                 case GameUser.User user -> new PlayerInfo(user.user(), Color.white, user.rating(), 0);
                                 default -> new PlayerInfo(new LightUser("", game.players().white().name(), "", false), Color.white, 0, 0);
@@ -82,11 +81,8 @@ public interface TVFeed {
                                 case GameUser.User user -> new PlayerInfo(user.user(), Color.black, user.rating(), 0);
                                 default -> new PlayerInfo(new LightUser("", game.players().black().name(), "", false), Color.black, 0, 0);
                             };
-
-                            var board = Board.fromFEN(summary.fen());
-                            eventQueue.offer(new JCNewGame(fromPlayerInfo(white), fromPlayerInfo(black), board, false));
+                            eventQueue.offer(new JCNewGame(fromPlayerInfo(white), fromPlayerInfo(black), Board.fromFEN(summary.fen()), false));
                         }
-                        case MoveInfo.Move move -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(move.fen()), move.wc(), move.bc()));
                     }
                 });
 
