@@ -12,7 +12,6 @@ class Main {
         if (play) {
             play();
         } else {
-            System.out.println("java Main.java play");
             watch();
         }
 

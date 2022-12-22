@@ -50,29 +50,19 @@ public interface TVFeed {
     }
 
     static TVFeed classicalGame(Consumer<String> consumer) {
-        TVChannels tvchannels = client.games().tvChannels().get();
-        TVChannels.TVChannel classical = tvchannels.classical();
-        String gameId = classical.gameId();
-
+        String gameId = client.games().tvChannels().get().classical().gameId();
         return gameId(gameId, consumer);
     }
 
     static TVFeed rapidGame(Consumer<String> consumer) {
-        TVChannels tvchannels = client.games().tvChannels().get();
-        TVChannels.TVChannel rapid = tvchannels.rapid();
-        String gameId = rapid.gameId();
-
+        String gameId = client.games().tvChannels().get().rapid().gameId();
         return gameId(gameId, consumer);
     }
 
     static TVFeed blitzGame(Consumer<String> consumer) {
-        TVChannels tvchannels = client.games().tvChannels().get();
-        TVChannels.TVChannel blitz = tvchannels.blitz();
-        String gameId = blitz.gameId();
-
+        String gameId = client.games().tvChannels().get().blitz().gameId();
         return gameId(gameId, consumer);
     }
-
 
     static TVFeed gameId(String gameId, Consumer<String> consumer) {
         BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
