@@ -21,25 +21,20 @@ public interface TVFeed {
     void stop();
 
     static TVFeed featuredGame(Consumer<String> consumer) {
-        BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
-        var stream = client.games().tvFeed().stream();
+        Stream<FeedEvent> stream = client.games().tvFeed().stream()
+            .map(tvFeedEvent -> switch(tvFeedEvent.d()) {
+                case Fen(String fen, var lm, var wc, var bc) -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
+                case Featured(var id, Color orientation, var players, String fen) -> {
+                    record PlayerColors(PlayerInfo white, PlayerInfo black) {}
+                    var playerColors = switch(players.get(0).color()) {
+                        case white -> new PlayerColors(players.get(0), players.get(1));
+                        case black -> new PlayerColors(players.get(1), players.get(0));
+                    };
+                    yield new JCNewGame(fromPlayerInfo(playerColors.white), fromPlayerInfo(playerColors.black), Board.fromFEN(fen), orientation != Color.white);
+                }
+            });
 
-        Runnable runnable = () -> stream
-                .forEach(tvFeedEvent -> {
-                    switch(tvFeedEvent.d()) {
-                        case Fen(String fen, var lm, var wc, var bc) -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
-                        case Featured(var id, Color orientation, var players, String fen) -> {
-                            record PlayerColors(PlayerInfo white, PlayerInfo black) {}
-                            var playerColors = switch(players.get(0).color()) {
-                                case white -> new PlayerColors(players.get(0), players.get(1));
-                                case black -> new PlayerColors(players.get(1), players.get(0));
-                            };
-                            eventQueue.offer(new JCNewGame(fromPlayerInfo(playerColors.white), fromPlayerInfo(playerColors.black), Board.fromFEN(fen), orientation != Color.white));
-                        }
-                    }
-                });
-
-        return watch(consumer, stream, runnable, eventQueue);
+        return watch(consumer, stream);
     }
 
     private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
@@ -63,36 +58,31 @@ public interface TVFeed {
     }
 
     static TVFeed gameId(String gameId, Consumer<String> consumer) {
-        BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         var game = client.games().byGameId(gameId).get();
+        Stream<FeedEvent> stream = client.games().moveInfosByGameId(gameId).stream()
+            .map(moveInfo -> switch(moveInfo) {
+                case Move(String fen, var lm, int wc, int bc) -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
+                case GameSummary summary -> {
+                    var white = switch(game.players().white()) {
+                        case GameUser.User user -> new PlayerInfo(user.user(), Color.white, user.rating(), 0);
+                        default -> new PlayerInfo(new LightUser("", game.players().white().name(), "", false), Color.white, 0, 0);
+                    };
+                    var black = switch(game.players().black()) {
+                        case GameUser.User user -> new PlayerInfo(user.user(), Color.black, user.rating(), 0);
+                        default -> new PlayerInfo(new LightUser("", game.players().black().name(), "", false), Color.black, 0, 0);
+                    };
+                    yield new JCNewGame(fromPlayerInfo(white), fromPlayerInfo(black), Board.fromFEN(summary.fen()), false);
+                }
+            });
 
-        var stream = client.games().moveInfosByGameId(gameId).stream();
-
-        Runnable runnable = () -> stream
-                .forEach(moveInfo -> {
-                    switch(moveInfo) {
-                        case Move(String fen, var lm, int wc, int bc) -> eventQueue.offer(new JCBoardUpdate(Board.fromFEN(fen), wc, bc));
-                        case GameSummary summary -> {
-                            var white = switch(game.players().white()) {
-                                case GameUser.User user -> new PlayerInfo(user.user(), Color.white, user.rating(), 0);
-                                default -> new PlayerInfo(new LightUser("", game.players().white().name(), "", false), Color.white, 0, 0);
-                            };
-                            var black = switch(game.players().black()) {
-                                case GameUser.User user -> new PlayerInfo(user.user(), Color.black, user.rating(), 0);
-                                default -> new PlayerInfo(new LightUser("", game.players().black().name(), "", false), Color.black, 0, 0);
-                            };
-                            eventQueue.offer(new JCNewGame(fromPlayerInfo(white), fromPlayerInfo(black), Board.fromFEN(summary.fen()), false));
-                        }
-                    }
-                });
-
-        return watch(consumer, stream, runnable, eventQueue);
+        return watch(consumer, stream);
     }
 
-    private static TVFeed watch(Consumer<String> consumer, Stream<?> stream, Runnable runnable, BlockingQueue<FeedEvent> eventQueue) {
+    private static TVFeed watch(Consumer<String> consumer, Stream<FeedEvent> stream) {
+        BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         ScheduledExecutorService timeTickerExecutor = Executors.newSingleThreadScheduledExecutor();
-        executorService.submit(runnable);
+        executorService.submit(() -> stream.forEach(eventQueue::offer));
 
         timeTickerExecutor.scheduleAtFixedRate(
                 () -> eventQueue.offer(new JCTimeTick()),
@@ -148,7 +138,5 @@ public interface TVFeed {
     record JCNewGame(JCPlayerInfo white, JCPlayerInfo black, Board board, boolean flipped) implements FeedEvent {};
     record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) implements FeedEvent {};
     record JCTimeTick() implements FeedEvent {};
-
-
 
 }
