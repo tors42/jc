@@ -18,10 +18,8 @@ public interface TVFeed {
 
     static Client client = Client.basic();
 
-    void stop();
-
     static TVFeed featuredGame(Consumer<String> consumer) {
-        Stream<FeedEvent> stream = client.games().tvFeed().stream()
+        Stream<FeedEvent> streamFromFeed = client.games().tvFeed().stream()
             .map(tvFeedEvent -> switch(tvFeedEvent.d()) {
                 case Fen(String fen, var lm, var wc, var bc) -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
                 case Featured(var id, Color orientation, var players, String fen) -> {
@@ -34,32 +32,16 @@ public interface TVFeed {
                 }
             });
 
-        return watch(consumer, stream);
+        return watch(consumer, streamFromFeed);
     }
 
-    private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
-        JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().title());
-        return new JCPlayerInfo(user, playerInfo.seconds());
-    }
-
-    static TVFeed classicalGame(Consumer<String> consumer) {
-        String gameId = client.games().tvChannels().get().classical().gameId();
-        return gameId(gameId, consumer);
-    }
-
-    static TVFeed rapidGame(Consumer<String> consumer) {
-        String gameId = client.games().tvChannels().get().rapid().gameId();
-        return gameId(gameId, consumer);
-    }
-
-    static TVFeed blitzGame(Consumer<String> consumer) {
-        String gameId = client.games().tvChannels().get().blitz().gameId();
-        return gameId(gameId, consumer);
-    }
+    static TVFeed classical(Consumer<String> consumer) { return gameId(client.games().tvChannels().get().classical().gameId(), consumer); }
+    static TVFeed rapid(Consumer<String> consumer)     { return gameId(client.games().tvChannels().get().rapid().gameId(),     consumer); }
+    static TVFeed blitz(Consumer<String> consumer)     { return gameId(client.games().tvChannels().get().blitz().gameId(),     consumer); }
 
     static TVFeed gameId(String gameId, Consumer<String> consumer) {
         var game = client.games().byGameId(gameId).get();
-        Stream<FeedEvent> stream = client.games().moveInfosByGameId(gameId).stream()
+        Stream<FeedEvent> streamFromGameId = client.games().moveInfosByGameId(gameId).stream()
             .map(moveInfo -> switch(moveInfo) {
                 case Move(String fen, var lm, int wc, int bc) -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
                 case GameSummary summary -> {
@@ -75,7 +57,7 @@ public interface TVFeed {
                 }
             });
 
-        return watch(consumer, stream);
+        return watch(consumer, streamFromGameId);
     }
 
     private static TVFeed watch(Consumer<String> consumer, Stream<FeedEvent> stream) {
@@ -133,10 +115,17 @@ public interface TVFeed {
         }
     }
 
+    void stop();
+
     sealed interface FeedEvent {}
 
     record JCNewGame(JCPlayerInfo white, JCPlayerInfo black, Board board, boolean flipped) implements FeedEvent {};
     record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) implements FeedEvent {};
     record JCTimeTick() implements FeedEvent {};
+
+    private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
+        JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().title());
+        return new JCPlayerInfo(user, playerInfo.seconds());
+    }
 
 }
