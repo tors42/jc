@@ -11,6 +11,7 @@ import java.awt.*;
 import chariot.*;
 import chariot.model.*;
 import chariot.model.Event;
+import chariot.model.Enums.Color;
 import chariot.model.Enums.Offer;
 import chariot.util.Board;
 import jc.model.JCState;
@@ -195,8 +196,8 @@ public interface Play {
 
                     currentState = switch(event) {
                         case NewGame(var white, var black, var initial, var board, var flipped) -> new JCState(
-                                new JCPlayerInfo(white, initial),
-                                new JCPlayerInfo(black, initial),
+                                new JCPlayerInfo(white, initial, Color.white),
+                                new JCPlayerInfo(black, initial, Color.black),
                                 board,
                                 flipped);
                         case BoardUpdate(var board, int whiteSeconds, int blackSeconds) -> currentState != null ?

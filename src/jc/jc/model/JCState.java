@@ -2,6 +2,7 @@ package jc.model;
 
 import java.time.Duration;
 
+import chariot.model.Enums.Color;
 import chariot.util.Board;
 
 public record JCState(JCPlayerAndClock white, JCPlayerAndClock black, Board board, boolean flipped) {
@@ -16,7 +17,7 @@ public record JCState(JCPlayerAndClock white, JCPlayerAndClock black, Board boar
     public JCState withBlackSeconds(int seconds) { return new JCState(white, black.withSeconds(seconds), board, flipped); }
 
     public record JCUser(String name, String title) {}
-    public record JCPlayerInfo(JCUser user, Integer seconds) {}
+    public record JCPlayerInfo(JCUser user, Integer seconds, Color color) {}
 
     public JCState withWhite(JCPlayerInfo white) { return new JCState(new JCPlayerAndClock(white, white.seconds()), black, board, flipped); }
     public JCState withBlack(JCPlayerInfo black) { return new JCState(white, new JCPlayerAndClock(black, black.seconds()), board, flipped); }

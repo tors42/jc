@@ -19,9 +19,9 @@ class Main {
 
     static void watch() {
         //TVFeed tvFeed = TVFeed.gameId("IXVqbsOP", System.out::println);
-        //TVFeed tvFeed = TVFeed.classicalGame(System.out::println);
-        //TVFeed tvFeed = TVFeed.rapidGame(System.out::println);
-        //TVFeed tvFeed = TVFeed.blitzGame(System.out::println);
+        //TVFeed tvFeed = TVFeed.classical(System.out::println);
+        //TVFeed tvFeed = TVFeed.rapid(System.out::println);
+        //TVFeed tvFeed = TVFeed.blitz(System.out::println);
         TVFeed tvFeed = TVFeed.featuredGame(System.out::println);
 
         System.console().readLine();
