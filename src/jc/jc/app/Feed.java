@@ -37,10 +37,6 @@ public interface Feed {
         return watch(consumer, streamFromFeed);
     }
 
-    static Feed classical(Consumer<String> consumer) { return resubscribingGameId(() -> tvChannels().classical().gameId(), consumer); }
-    static Feed rapid(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().rapid().gameId(), consumer); }
-    static Feed blitz(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().blitz().gameId(), consumer); }
-
     static Feed gameId(String gameId, Consumer<String> consumer) {
         return watch(consumer, streamFromGameId(gameId));
     }
@@ -60,6 +56,10 @@ public interface Feed {
 
         return streamFromGameId;
     }
+
+    static Feed classical(Consumer<String> consumer) { return resubscribingGameId(() -> tvChannels().classical().gameId(), consumer); }
+    static Feed rapid(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().rapid().gameId(), consumer); }
+    static Feed blitz(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().blitz().gameId(), consumer); }
 
     static private Feed resubscribingGameId(Supplier<String> gameIdProvider, Consumer<String> consumer) {
         // Synthetic eternal stream of games
