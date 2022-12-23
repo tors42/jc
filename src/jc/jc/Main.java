@@ -1,28 +1,34 @@
 package jc;
 
-import java.util.Arrays;
+import java.util.*;
+import java.util.function.Consumer;
 
 import jc.app.*;
 
 class Main {
 
     public static void main(String[] args) {
-        boolean play = Arrays.stream(args).anyMatch(s -> s.contains("play"));
+        var argsList = Arrays.stream(args).toList();
+        boolean play = argsList.stream().anyMatch(s -> s.contains("play"));
 
         if (play) {
             play();
         } else {
-            watch();
+            watch(argsList);
         }
 
     }
 
-    static void watch() {
-        //TVFeed tvFeed = TVFeed.gameId("IXVqbsOP", System.out::println);
-        //TVFeed tvFeed = TVFeed.classical(System.out::println);
-        //TVFeed tvFeed = TVFeed.rapid(System.out::println);
-        //TVFeed tvFeed = TVFeed.blitz(System.out::println);
-        TVFeed tvFeed = TVFeed.featuredGame(System.out::println);
+    static void watch(List<String> args) {
+        Consumer<String> consumer = System.out::println;
+
+        Feed tvFeed = switch(args) {
+            case List<String> l when l.isEmpty()             -> Feed.featuredGame(consumer);
+            case List<String> l when l.contains("classical") -> Feed.classical(consumer);
+            case List<String> l when l.contains("rapid")     -> Feed.rapid(consumer);
+            case List<String> l when l.contains("blitz")     -> Feed.blitz(consumer);
+            case List<String> l                              -> Feed.gameId(l.get(0), consumer);
+        };
 
         System.console().readLine();
         tvFeed.stop();
