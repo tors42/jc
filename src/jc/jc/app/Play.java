@@ -1,6 +1,6 @@
 package jc.app;
 
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.prefs.Preferences;
 import java.util.stream.Stream;
@@ -11,8 +11,8 @@ import java.awt.*;
 import chariot.*;
 import chariot.model.*;
 import chariot.model.Event;
+import chariot.model.Enums.*;
 import chariot.model.Enums.Color;
-import chariot.model.Enums.Offer;
 import chariot.util.Board;
 import jc.model.JCState;
 import jc.model.JCState.*;
@@ -80,7 +80,7 @@ public interface Play {
         final ClientAuth client;
         final Event.GameEvent.GameInfo game;
         BlockingQueue<PlayEvent> queue = new ArrayBlockingQueue<>(1024);
-        volatile Stream<GameEvent> stream = Stream.of();
+        volatile Stream<PlayEvent> stream = Stream.of();
         ScheduledExecutorService timeTickerExecutor = Executors.newSingleThreadScheduledExecutor();
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
@@ -153,38 +153,31 @@ public interface Play {
         }
 
         void start() {
-            stream = client.board().connectToGame(game.gameId()).stream();
             timeTickerExecutor.scheduleAtFixedRate(
                     () -> queue.offer(new TimeTick()),
                     0, 1, TimeUnit.SECONDS);
 
-            executor.submit(() -> stream
-                    .forEach(event -> {
-                        switch(event) {
-                            case GameEvent.Full full -> {
-                                queue.offer(
-                                        new BoardUpdate(
-                                            "startpos".equals(full.initialFen()) ? Board.fromStandardPosition() : Board.fromFEN(full.initialFen()),
-                                            full.clock().initial()/1000,
-                                            full.clock().initial()/1000)
-                                        );
-                            }
-                            case GameEvent.State state -> {
-                                var board = Board.fromFEN(game.fen());
-                                for(var move : state.moves().split(" ")) board = board.play(move);
-                                queue.offer(new BoardUpdate(board, (int) (state.wtime()/1000), (int) (state.btime()/1000)));
-                            }
-                            case GameEvent.Chat chat -> {
-                                queue.offer(new Chat(chat.username(), chat.text(), chat.room()));
-                            }
-                            case GameEvent.OpponentGone gone -> {
-                                queue.offer(new Gone());
-                            }
-                        };
-                    }));
+            stream = client.board().connectToGame(game.gameId()).stream()
+                .map(event -> switch(event) {
+                    case GameEvent.Full full ->
+                        new BoardUpdate("startpos".equals(full.initialFen()) ? Board.fromStandardPosition() : Board.fromFEN(full.initialFen()),
+                                full.clock().initial()/1000,
+                                full.clock().initial()/1000);
+                    case GameEvent.State state -> new BoardUpdate(
+                            Arrays.stream(state.moves().split(" ")).reduce(
+                                Board.fromFEN(game.fen()),
+                                (board, move) -> board.play(move),
+                                (b1,b2)-> b2
+                                ),
+                            (int) (state.wtime()/1000),
+                            (int) (state.btime()/1000));
+                    case GameEvent.Chat(var type, String username, String text, Room room) -> new Chat(username, text, room);
+                    case GameEvent.OpponentGone gone -> new Gone();
+                });
+
+            executor.submit(() -> stream.forEach(queue::offer));
 
             executor.submit(() -> {
-
                 JCState currentState = null;
                 while(true) {
                     final PlayEvent event;
@@ -226,7 +219,6 @@ public interface Play {
             stream.close();
             executor.shutdownNow();
             timeTickerExecutor.shutdownNow();
-            queue.clear();
         }
 
     }
