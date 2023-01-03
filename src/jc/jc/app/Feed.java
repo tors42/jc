@@ -61,7 +61,7 @@ public interface Feed {
     static Feed rapid(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().rapid().gameId(), consumer); }
     static Feed blitz(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().blitz().gameId(), consumer); }
 
-    static private Feed resubscribingGameId(Supplier<String> gameIdProvider, Consumer<String> consumer) {
+    private static Feed resubscribingGameId(Supplier<String> gameIdProvider, Consumer<String> consumer) {
         // Synthetic eternal stream of games
         Stream<FeedEvent> resubscribingStream = StreamSupport.stream(new FeedEventSpliterator(gameIdProvider), false);
         return watch(consumer, resubscribingStream);
