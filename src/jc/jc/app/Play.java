@@ -254,7 +254,7 @@ public interface Play {
 
                 yield Opt.empty();
             }
-            case String token -> Opt.of(Client.auth(token));
+            case String token -> Opt.of(Client.auth(c -> c.api(lichessApi).auth(token)));
         };
     }
 
