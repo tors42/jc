@@ -167,7 +167,7 @@ public interface Play {
                             Arrays.stream(state.moves().split(" ")).reduce(
                                 Board.fromFEN(game.fen()),
                                 (board, move) -> board.play(move),
-                                (b1,b2)-> b2
+                                (b1,__) -> __ //unused, since non-parallel stream
                                 ),
                             (int) (state.wtime()/1000),
                             (int) (state.btime()/1000));
