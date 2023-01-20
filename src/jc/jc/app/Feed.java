@@ -49,7 +49,7 @@ public interface Feed {
                 case Move(String fen, var lm, int wc, int bc)
                     -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
                 case GameSummary summary
-                    -> new JCNewGame(fromGameUser(white, game.players().white()), fromGameUser(black, game.players().black()),
+                    -> new JCNewGame(fromPlayer(white, game.players().white()), fromPlayer(black, game.players().black()),
                             Board.fromFEN(summary.fen()),
                             false);
             });
@@ -186,10 +186,10 @@ public interface Feed {
         return new JCPlayerInfo(user, playerInfo.seconds(), playerInfo.color());
     }
 
-    private static JCPlayerInfo fromGameUser(Color color, GameUser gameUser) {
-        return fromPlayerInfo(switch(gameUser) {
-            case GameUser.User user -> new PlayerInfo(user.user(), color, user.rating(), 0);
-            default -> new PlayerInfo(new LightUser("", gameUser.name(), "", false), color, 0, 0);
+    private static JCPlayerInfo fromPlayer(Color color, Player player) {
+        return fromPlayerInfo(switch(player) {
+            case Player.User user -> new PlayerInfo(user.user(), color, user.rating(), 0);
+            default -> new PlayerInfo(new LightUser("", player.name(), "", false), color, 0, 0);
         });
     }
 
