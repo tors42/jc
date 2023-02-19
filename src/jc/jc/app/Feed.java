@@ -42,15 +42,14 @@ public interface Feed {
     }
 
     private static Stream<FeedEvent> streamFromGameId(String gameId) {
-        var game = client.games().byGameId(gameId).get();
         // Single game stream
         Stream<FeedEvent> streamFromGameId = client.games().moveInfosByGameId(gameId).stream()
             .map(moveInfo -> switch(moveInfo) {
                 case Move(String fen, var lm, int wc, int bc)
                     -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
-                case GameSummary summary
+                case GameSummary game
                     -> new JCNewGame(fromPlayer(white, game.players().white()), fromPlayer(black, game.players().black()),
-                            Board.fromFEN(summary.fen()),
+                            Board.fromFEN(game.fen()),
                             false);
             });
 
