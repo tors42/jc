@@ -40,6 +40,11 @@ Run with
 
     $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar
 
+The above command shows the featured TV game.
+
+Specify "classical", "rapid" or "blitz" to watch that TV channel, or a game id to watch that game.
+
+    $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar blitz
 
 ## Play
 
