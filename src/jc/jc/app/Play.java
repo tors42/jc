@@ -235,26 +235,23 @@ public interface Play {
                 if (client instanceof ClientAuth auth) yield Opt.of(auth);
 
                 client = Client.basic(c -> c.api(lichessApi));
-                var urlAndToken = client.account().oauthPKCE(Client.Scope.board_play);
 
-                System.out.println("""
+                var authResult = client.withPkce(
+                        uri -> System.out.println("""
 
                         Visit the following URL and choose to grant access or not,
                         %s
 
-                        """.formatted(urlAndToken.url()));
+                        """.formatted(uri)),
+                        pkce -> pkce.scope(Client.Scope.board_play));
 
-                try {
-                    var auth = Client.auth(c -> c.api(lichessApi).auth(urlAndToken.token().get()));
-                    auth.store(prefs());
-                    yield Opt.of(auth);
-                } catch (Exception e) {
-                    System.out.println("OAuth2 failed (%s)".formatted(e.getMessage()));
-                }
+                if (! (authResult instanceof Client.AuthOk ok)) yield Opt.empty();
 
-                yield Opt.empty();
+                var auth = ok.client();
+                auth.store(prefs());
+                yield Opt.of(auth);
             }
-            case String token -> Opt.of(Client.auth(c -> c.api(lichessApi).auth(token)));
+            case String token -> Opt.of(Client.auth(c -> c.api(lichessApi), token));
         };
     }
 
