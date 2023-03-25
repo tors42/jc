@@ -178,7 +178,9 @@ public interface Play {
             executor.submit(() -> stream.forEach(queue::offer));
 
             executor.submit(() -> {
-                JCState currentState = null;
+
+                JCState currentState = new JCState.None();
+
                 while(true) {
                     final PlayEvent event;
                     try {
@@ -188,29 +190,22 @@ public interface Play {
                     }
 
                     currentState = switch(event) {
-                        case NewGame(var white, var black, var initial, var board, var flipped) -> new JCState(
+                        case NewGame(var white, var black, var initial, var board, var flipped) -> JCState.of(
                                 new JCPlayerInfo(white, initial, Color.white),
                                 new JCPlayerInfo(black, initial, Color.black),
                                 board,
                                 flipped);
-                        case BoardUpdate(var board, int whiteSeconds, int blackSeconds) -> currentState != null ?
-                            currentState.withBoard(board)
+                        case BoardUpdate(var board, int whiteSeconds, int blackSeconds) -> currentState
+                            .withBoard(board)
                             .withWhiteSeconds(whiteSeconds)
-                            .withBlackSeconds(blackSeconds) :
-                            currentState;
-                        case TimeTick tick -> (currentState != null && !currentState.board().ended()) ?
-                            currentState.board().whiteToMove() ?
-                            currentState.withWhiteSeconds(currentState.white().syntheticSeconds()-1) :
-                            currentState.withBlackSeconds(currentState.black().syntheticSeconds()-1) :
-                            currentState;
-                        case Chat chat -> currentState;
-                        case Gone gone -> currentState;
+                            .withBlackSeconds(blackSeconds);
+                        case TimeTick() -> currentState.withOneSecondTick();
+                        case Chat chat  -> currentState;
+                        case Gone gone  -> currentState;
                     };
 
-                    if (currentState != null) {
-                        String board = JCState.render(currentState);
-                        SwingUtilities.invokeLater(() -> textArea.setText(board));
-                    }
+                    String board = JCState.render(currentState);
+                    SwingUtilities.invokeLater(() -> textArea.setText(board));
                 };
             });
         }

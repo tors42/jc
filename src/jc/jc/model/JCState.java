@@ -5,29 +5,86 @@ import java.time.Duration;
 import chariot.model.Enums.Color;
 import chariot.util.Board;
 
-public record JCState(JCPlayerAndClock white, JCPlayerAndClock black, Board board, boolean flipped) {
-    public JCState(JCPlayerInfo infoWhite, JCPlayerInfo infoBlack, Board board, boolean flipped) {
-        this(new JCPlayerAndClock(infoWhite, infoWhite.seconds()),
-             new JCPlayerAndClock(infoBlack, infoBlack.seconds()),
-             board,
-             flipped);
+public sealed interface JCState {
+
+    record None() implements JCState {}
+
+    default JCState withBoard(Board board) {
+        return switch(this) {
+            case None n -> n;
+            case Basic b -> b.withBoard(board);
+            case WithMove(Basic b, var lm) -> new WithMove(b.withBoard(board), lm);
+        };
     }
 
-    public JCState withWhiteSeconds(int seconds) { return new JCState(white.withSeconds(seconds), black, board, flipped); }
-    public JCState withBlackSeconds(int seconds) { return new JCState(white, black.withSeconds(seconds), board, flipped); }
+    default JCState withWhiteSeconds(int seconds) {
+        return switch(this) {
+            case None n -> n;
+            case Basic b -> b.withWhiteSeconds(seconds);
+            case WithMove(Basic b, var lm) -> new WithMove(b.withWhiteSeconds(seconds), lm);
+        };
+    }
+
+    default JCState withBlackSeconds(int seconds) {
+        return switch(this) {
+            case None n -> n;
+            case Basic b -> b.withBlackSeconds(seconds);
+            case WithMove(Basic b, var lm) -> new WithMove(b.withBlackSeconds(seconds), lm);
+        };
+    }
+
+    default JCState withLastMove(String lm) {
+        return switch(this) {
+            case None n -> n;
+            case Basic b -> new WithMove(b, lm);
+            case WithMove wm -> new WithMove(wm.basic, lm);
+        };
+    }
+
+    default JCState withOneSecondTick() {
+        return switch(this) {
+            case None n -> n;
+            case Basic b -> b.board().whiteToMove()
+                ? b.withWhiteSeconds(b.white.syntheticSeconds - 1)
+                : b.withBlackSeconds(b.black.syntheticSeconds - 1);
+            case WithMove wm -> new WithMove(wm.basic.board.whiteToMove()
+                    ? wm.basic().withWhiteSeconds(wm.basic.white.syntheticSeconds - 1)
+                    : wm.basic().withBlackSeconds(wm.basic.black.syntheticSeconds - 1),
+                    wm.lm);
+        };
+    }
+
+
+    record Basic(JCPlayerAndClock white, JCPlayerAndClock black, Board board, boolean flipped) implements JCState {
+        public Basic withWhiteSeconds(int seconds) { return new Basic(white.withSeconds(seconds), black, board, flipped); }
+        public Basic withBlackSeconds(int seconds) { return new Basic(white, black.withSeconds(seconds), board, flipped); }
+        public Basic withBoard(Board board)        { return new Basic(white, black, board, flipped); }
+    }
+
+    record WithMove(Basic basic, String lm) implements JCState {}
+
+    static JCState of(JCPlayerInfo white, JCPlayerInfo black, Board board, boolean flipped) {
+        return new Basic(
+                new JCPlayerAndClock(white, white.seconds()),
+                new JCPlayerAndClock(black, black.seconds()),
+                board,
+                flipped);
+    }
 
     public record JCUser(String name, String title) {}
     public record JCPlayerInfo(JCUser user, Integer seconds, Color color) {}
-
-    public JCState withWhite(JCPlayerInfo white) { return new JCState(new JCPlayerAndClock(white, white.seconds()), black, board, flipped); }
-    public JCState withBlack(JCPlayerInfo black) { return new JCState(white, new JCPlayerAndClock(black, black.seconds()), board, flipped); }
-    public JCState withBoard(Board board) { return new JCState(white, black, board, flipped); }
 
     public record JCPlayerAndClock(JCPlayerInfo info, int syntheticSeconds) {
         public JCPlayerAndClock withSeconds(int syntheticSeconds) { return new JCPlayerAndClock(info, syntheticSeconds); }
     }
 
-    public static String render(JCState state) {
+    public static String render(JCState jcstate) {
+        Basic state = switch(jcstate) {
+            case None n -> null;
+            case Basic b -> b;
+            case WithMove wm -> wm.basic();
+        };
+        if (state == null) return "";
 
         var upperPlayer = state.flipped() ? state.white() : state.black();
         var lowerPlayer = state.flipped() ? state.black() : state.white();

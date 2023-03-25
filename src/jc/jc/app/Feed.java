@@ -3,6 +3,8 @@ package jc.app;
 import jc.model.JCState;
 import jc.model.JCState.*;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -12,61 +14,66 @@ import java.util.stream.*;
 import chariot.Client;
 import chariot.model.*;
 import chariot.model.MoveInfo.*;
+import chariot.model.TVChannels.TVChannel;
 import chariot.model.TVFeedEvent.*;
 import chariot.util.Board;
 import chariot.model.Enums.Color;
-import static chariot.model.Enums.Color.white;
-import static chariot.model.Enums.Color.black;
 
 public interface Feed {
 
     static Client client = Client.basic();
 
-    static Feed featuredGame(Consumer<String> consumer) {
+    static Feed featuredGame(Consumer<JCState> consumer) {
         // Eternal stream of games
         Stream<FeedEvent> streamFromFeed = client.games().tvFeed().stream()
             .map(tvFeedEvent -> switch(tvFeedEvent.d()) {
                 case Fen(String fen, var lm, var wc, var bc)
-                    -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
+                    -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
                 case Featured(var id, Color orientation, var players, String fen)
                     -> new JCNewGame(players.stream().map(Feed::fromPlayerInfo).toList(),
                             Board.fromFEN(fen),
-                            orientation != white);
+                            orientation != Color.white);
             });
 
         return watch(consumer, streamFromFeed);
     }
 
-    static Feed gameId(String gameId, Consumer<String> consumer) {
-        return watch(consumer, streamFromGameId(gameId));
+    static Feed gameId(String gameId, Consumer<JCState> consumer) {
+        return watch(consumer, streamFromGameId(gameId, ""));
     }
 
-    private static Stream<FeedEvent> streamFromGameId(String gameId) {
+    private static Stream<FeedEvent> streamFromGameId(String gameId, String userId) {
         // Single game stream
         Stream<FeedEvent> streamFromGameId = client.games().moveInfosByGameId(gameId).stream()
             .map(moveInfo -> switch(moveInfo) {
                 case Move(String fen, var lm, int wc, int bc)
-                    -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc);
+                    -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
                 case GameSummary game
-                    -> new JCNewGame(fromPlayer(white, game.players().white()), fromPlayer(black, game.players().black()),
+                    -> new JCNewGame(fromPlayer(Color.white, game.players().white()), fromPlayer(Color.black, game.players().black()),
                             Board.fromFEN(game.fen()),
-                            false);
+                            game.players().black().name().toLowerCase().equals(userId));
             });
 
         return streamFromGameId;
     }
 
-    static Feed classical(Consumer<String> consumer) { return resubscribingGameId(() -> tvChannels().classical().gameId(), consumer); }
-    static Feed rapid(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().rapid().gameId(), consumer); }
-    static Feed blitz(Consumer<String> consumer)     { return resubscribingGameId(() -> tvChannels().blitz().gameId(), consumer); }
+    record GameAndUser(String gameId, String userId) {
+        public GameAndUser(TVChannel channel) {
+            this(channel.gameId(), channel.user().id());
+        }
+    }
 
-    private static Feed resubscribingGameId(Supplier<String> gameIdProvider, Consumer<String> consumer) {
+    static Feed classical(Consumer<JCState> consumer) { return resubscribingGameId(() -> new GameAndUser(tvChannels().classical()), consumer); }
+    static Feed rapid(Consumer<JCState> consumer)     { return resubscribingGameId(() -> new GameAndUser(tvChannels().rapid()), consumer); }
+    static Feed blitz(Consumer<JCState> consumer)     { return resubscribingGameId(() -> new GameAndUser(tvChannels().blitz()), consumer); }
+
+    private static Feed resubscribingGameId(Supplier<GameAndUser> gameIdProvider, Consumer<JCState> consumer) {
         // Synthetic eternal stream of games
         Stream<FeedEvent> resubscribingStream = StreamSupport.stream(new FeedEventSpliterator(gameIdProvider), false);
         return watch(consumer, resubscribingStream);
     }
 
-    private static Feed watch(Consumer<String> consumer, Stream<FeedEvent> stream) {
+    private static Feed watch(Consumer<JCState> consumer, Stream<FeedEvent> stream) {
         BlockingQueue<FeedEvent> eventQueue = new ArrayBlockingQueue<>(1024);
         ExecutorService executorService = Executors.newFixedThreadPool(2);
         ScheduledExecutorService timeTickerExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -77,7 +84,7 @@ public interface Feed {
                 0, 1, TimeUnit.SECONDS);
 
         executorService.submit(() -> {
-            JCState currentState = null;
+            JCState currentState = new JCState.None();
             while(true) {
                 final FeedEvent event;
                 try {
@@ -88,22 +95,16 @@ public interface Feed {
                 }
 
                 currentState = switch(event) {
-                    case JCNewGame(var white, var black, var board, var flipped) -> new JCState(white, black, board, flipped);
-                    case JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) -> currentState != null ?
-                        currentState.withBoard(board)
+                    case JCNewGame(var white, var black, var board, var flipped) -> JCState.of(white, black, board, flipped);
+                    case JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds, var lm) -> currentState
+                        .withBoard(board)
                         .withWhiteSeconds(whiteSeconds)
-                        .withBlackSeconds(blackSeconds) :
-                        currentState;
-                    case JCTimeTick() -> (currentState != null && !currentState.board().ended()) ?
-                        currentState.board().whiteToMove() ?
-                        currentState.withWhiteSeconds(currentState.white().syntheticSeconds()-1) :
-                        currentState.withBlackSeconds(currentState.black().syntheticSeconds()-1) :
-                        currentState;
+                        .withBlackSeconds(blackSeconds)
+                        .withLastMove(lm);
+                    case JCTimeTick() -> currentState.withOneSecondTick();
                 };
 
-                if (currentState != null) {
-                    consumer.accept(JCState.render(currentState));
-                }
+                consumer.accept(currentState);
             }
         });
         return new FeedHandle(executorService, timeTickerExecutor, stream);
@@ -122,10 +123,11 @@ public interface Feed {
     }
 
     class FeedEventSpliterator implements Spliterator<FeedEvent> {
-        final Supplier<String> gameIdProvider;
+        final Supplier<GameAndUser> gameIdProvider;
+        Instant previousQuery = null;
         Iterator<FeedEvent> iterator = Stream.<FeedEvent>of().iterator();
 
-        FeedEventSpliterator(Supplier<String> gameIdProvider) {
+        FeedEventSpliterator(Supplier<GameAndUser> gameIdProvider) {
             this.gameIdProvider = gameIdProvider;
         }
 
@@ -134,16 +136,21 @@ public interface Feed {
             if (iterator.hasNext()) {
                 action.accept(iterator.next());
             } else {
-                String newGameId = gameIdProvider.get();
+                if (previousQuery != null && Duration.between(previousQuery, Instant.now()).toSeconds() < 10) {
+                    try {TimeUnit.SECONDS.sleep(10); } catch (InterruptedException ie) {}
+                }
+                var gameAndUser = gameIdProvider.get();
+                previousQuery = Instant.now();
                 var gameOngoingSignal = new AtomicBoolean(true);
                 Thread.ofPlatform().name("game-over-listener").start(() -> {
-                    client.games().gameInfosByGameIds("jc", newGameId).stream()
-                        .takeWhile(gameInfo -> gameInfo.status() <= 20)
-                        .forEach(__ -> {});
+                    var result = client.games().gameInfosByGameIds("jc", gameAndUser.gameId());
+                    var stream = result.stream();
+                    stream.takeWhile(gameInfo -> gameInfo.status() <= 20).forEach(__ -> {});
+                    stream.close();
                     gameOngoingSignal.set(false);
                 });
 
-                iterator = streamFromGameId(newGameId)
+                iterator = streamFromGameId(gameAndUser.gameId(), gameAndUser.userId())
                     .takeWhile(__ -> gameOngoingSignal.get())
                     .iterator();
             }
@@ -173,7 +180,7 @@ public interface Feed {
             this(playerColors.white, playerColors.black, board, flipped);
         }
     };
-    record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds) implements FeedEvent {};
+    record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds, String lm) implements FeedEvent {};
     record JCTimeTick() implements FeedEvent {};
 
     private static TVChannels tvChannels() {
@@ -191,5 +198,4 @@ public interface Feed {
             default -> new PlayerInfo(new LightUser("", player.name(), "", false), color, 0, 0);
         });
     }
-
 }

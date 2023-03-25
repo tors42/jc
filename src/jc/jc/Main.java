@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import jc.app.*;
+import jc.model.JCState;
 
 class Main {
 
@@ -20,7 +21,7 @@ class Main {
     }
 
     static void watch(List<String> args) {
-        Consumer<String> consumer = System.out::println;
+        Consumer<JCState> consumer = state -> System.out.println(JCState.render(state));
 
         Feed tvFeed = switch(args) {
             case List<String> l when l.isEmpty()             -> Feed.featuredGame(consumer);
