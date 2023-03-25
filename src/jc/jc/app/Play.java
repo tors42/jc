@@ -132,8 +132,8 @@ public interface Play {
             setVisible(true);
 
             me = switch(client.account().profile()) {
-                case Entry<User>(User profile) one -> new JCUser(profile.username(), profile.title().orElse(""));
-                default -> new JCUser("Me", "");
+                case Entry<?>(User profile) -> new JCUser(profile.username(), profile.title().orElse(""));
+                default                     -> new JCUser("Me", "");
             };
 
             var opponent = switch(game.opponent()) {
