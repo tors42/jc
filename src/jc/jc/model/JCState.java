@@ -17,19 +17,19 @@ public sealed interface JCState {
         };
     }
 
-    default JCState withWhiteSeconds(int seconds) {
+    default JCState withWhiteTime(Duration time) {
         return switch(this) {
             case None n -> n;
-            case Basic b -> b.withWhiteSeconds(seconds);
-            case WithMove(Basic b, var lm) -> new WithMove(b.withWhiteSeconds(seconds), lm);
+            case Basic b -> b.withWhiteTime(time);
+            case WithMove(Basic b, var lm) -> new WithMove(b.withWhiteTime(time), lm);
         };
     }
 
-    default JCState withBlackSeconds(int seconds) {
+    default JCState withBlackTime(Duration time) {
         return switch(this) {
             case None n -> n;
-            case Basic b -> b.withBlackSeconds(seconds);
-            case WithMove(Basic b, var lm) -> new WithMove(b.withBlackSeconds(seconds), lm);
+            case Basic b -> b.withBlackTime(time);
+            case WithMove(Basic b, var lm) -> new WithMove(b.withBlackTime(time), lm);
         };
     }
 
@@ -45,19 +45,19 @@ public sealed interface JCState {
         return switch(this) {
             case None n -> n;
             case Basic b -> b.board().whiteToMove()
-                ? b.withWhiteSeconds(b.white.syntheticSeconds - 1)
-                : b.withBlackSeconds(b.black.syntheticSeconds - 1);
+                ? b.withWhiteTime(b.white.syntheticTime.minusSeconds(1))
+                : b.withBlackTime(b.black.syntheticTime.minusSeconds(1));
             case WithMove wm -> new WithMove(wm.basic.board.whiteToMove()
-                    ? wm.basic().withWhiteSeconds(wm.basic.white.syntheticSeconds - 1)
-                    : wm.basic().withBlackSeconds(wm.basic.black.syntheticSeconds - 1),
+                    ? wm.basic().withWhiteTime(wm.basic.white.syntheticTime.minusSeconds(1))
+                    : wm.basic().withBlackTime(wm.basic.black.syntheticTime.minusSeconds(1)),
                     wm.lm);
         };
     }
 
 
     record Basic(JCPlayerAndClock white, JCPlayerAndClock black, Board board, boolean flipped) implements JCState {
-        public Basic withWhiteSeconds(int seconds) { return new Basic(white.withSeconds(seconds), black, board, flipped); }
-        public Basic withBlackSeconds(int seconds) { return new Basic(white, black.withSeconds(seconds), board, flipped); }
+        public Basic withWhiteTime(Duration time) { return new Basic(white.withTime(time), black, board, flipped); }
+        public Basic withBlackTime(Duration time) { return new Basic(white, black.withTime(time), board, flipped); }
         public Basic withBoard(Board board)        { return new Basic(white, black, board, flipped); }
     }
 
@@ -65,17 +65,17 @@ public sealed interface JCState {
 
     static JCState of(JCPlayerInfo white, JCPlayerInfo black, Board board, boolean flipped) {
         return new Basic(
-                new JCPlayerAndClock(white, white.seconds()),
-                new JCPlayerAndClock(black, black.seconds()),
+                new JCPlayerAndClock(white, white.time()),
+                new JCPlayerAndClock(black, black.time()),
                 board,
                 flipped);
     }
 
     public record JCUser(String name, String title) {}
-    public record JCPlayerInfo(JCUser user, Integer seconds, Color color) {}
+    public record JCPlayerInfo(JCUser user, Duration time, Color color) {}
 
-    public record JCPlayerAndClock(JCPlayerInfo info, int syntheticSeconds) {
-        public JCPlayerAndClock withSeconds(int syntheticSeconds) { return new JCPlayerAndClock(info, syntheticSeconds); }
+    public record JCPlayerAndClock(JCPlayerInfo info, Duration syntheticTime) {
+        public JCPlayerAndClock withTime(Duration time) { return new JCPlayerAndClock(info, time); }
     }
 
     public static String render(JCState jcstate) {
@@ -90,14 +90,14 @@ public sealed interface JCState {
         var lowerPlayer = state.flipped() ? state.black() : state.white();
         String upperTitle = upperPlayer.info().user().title().isEmpty() ? "" : upperPlayer.info().user().title() + " ";
         String upperName =  upperPlayer.info().user().name();
-        String upperClock = formatSeconds(upperPlayer.syntheticSeconds());
+        String upperClock = formatTime(upperPlayer.syntheticTime());
         String upperToMove = (state.flipped() && state.board().whiteToMove()) ||
             (!state.flipped() && state.board().blackToMove()) ? "*" : "";
         String board = state.flipped() ? state.board().toString(c -> c.frame().flipped().coordinates()) :
             state.board().toString(c -> c.frame().coordinates());
         String lowerToMove = (state.flipped() && state.board().blackToMove()) ||
             (!state.flipped() && state.board().whiteToMove()) ? "*" : "";
-        String lowerClock = formatSeconds(lowerPlayer.syntheticSeconds());
+        String lowerClock = formatTime(lowerPlayer.syntheticTime());
         String lowerTitle = lowerPlayer.info().user().title().isEmpty() ? "" : lowerPlayer.info().user().title() + " ";
         String lowerName = lowerPlayer.info().user().name();
 
@@ -117,9 +117,8 @@ public sealed interface JCState {
         return rendered;
     }
 
-    static String formatSeconds(int seconds) {
-        Duration duration = Duration.ofSeconds(seconds);
-        return String.format("%d:%02d:%02d", duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart());
+    static String formatTime(Duration time) {
+        return String.format("%d:%02d:%02d", time.toHoursPart(), time.toMinutesPart(), time.toSecondsPart());
     }
 
 }

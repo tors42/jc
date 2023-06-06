@@ -26,7 +26,7 @@ public interface Feed {
     static Feed featuredGame(Consumer<JCState> consumer) {
         // Eternal stream of games
         Stream<FeedEvent> streamFromFeed = client.games().tvFeed().stream()
-            .map(tvFeedEvent -> switch(tvFeedEvent.d()) {
+            .map(tvFeedEvent -> switch(tvFeedEvent) {
                 case Fen(String fen, var lm, var wc, var bc)
                     -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
                 case Featured(var id, Color orientation, var players, String fen)
@@ -47,7 +47,7 @@ public interface Feed {
         Stream<FeedEvent> streamFromGameId = client.games().moveInfosByGameId(gameId).stream()
             .map(moveInfo -> switch(moveInfo) {
                 case Move(String fen, var lm, int wc, int bc)
-                    -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
+                    -> new JCBoardUpdate(Board.fromFEN(fen), Duration.ofSeconds(wc), Duration.ofSeconds(bc), lm);
                 case GameSummary game
                     -> new JCNewGame(fromPlayer(Color.white, game.players().white()), fromPlayer(Color.black, game.players().black()),
                             Board.fromFEN(game.fen()),
@@ -96,10 +96,10 @@ public interface Feed {
 
                 currentState = switch(event) {
                     case JCNewGame(var white, var black, var board, var flipped) -> JCState.of(white, black, board, flipped);
-                    case JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds, var lm) -> currentState
+                    case JCBoardUpdate(Board board, Duration whiteTime, Duration blackTime, var lm) -> currentState
                         .withBoard(board)
-                        .withWhiteSeconds(whiteSeconds)
-                        .withBlackSeconds(blackSeconds)
+                        .withWhiteTime(whiteTime)
+                        .withBlackTime(blackTime)
                         .withLastMove(lm);
                     case JCTimeTick() -> currentState.withOneSecondTick();
                 };
@@ -180,7 +180,7 @@ public interface Feed {
             this(playerColors.white, playerColors.black, board, flipped);
         }
     };
-    record JCBoardUpdate(Board board, int whiteSeconds, int blackSeconds, String lm) implements FeedEvent {};
+    record JCBoardUpdate(Board board, Duration whiteTime, Duration blackTime, String lm) implements FeedEvent {};
     record JCTimeTick() implements FeedEvent {};
 
     private static TVChannels tvChannels() {
@@ -188,14 +188,22 @@ public interface Feed {
     }
 
     private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
-        JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().title());
-        return new JCPlayerInfo(user, playerInfo.seconds(), playerInfo.color());
+        JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().titleOpt().orElse(""));
+        return new JCPlayerInfo(user, playerInfo.time(), playerInfo.color());
     }
 
     private static JCPlayerInfo fromPlayer(Color color, Player player) {
         return fromPlayerInfo(switch(player) {
-            case Player.User user -> new PlayerInfo(user.user(), color, user.rating(), 0);
-            default -> new PlayerInfo(new LightUser("", player.name(), "", false), color, 0, 0);
+            case Player.Account account ->
+                new PlayerInfo(UserInfo.of(
+                            account.user().id(),
+                            account.user().name(),
+                            account.user().title().orElse(null)),
+                        color, account.rating(), Duration.ZERO);
+            default ->
+                new PlayerInfo(
+                        UserInfo.of("", player.name()),
+                        color, 0, Duration.ZERO);
         });
     }
 }
