@@ -3,6 +3,7 @@ package jc;
 import java.util.*;
 import java.util.function.Consumer;
 
+import chariot.model.Enums.Channel;
 import jc.app.*;
 import jc.model.JCState;
 
@@ -25,9 +26,9 @@ class Main {
 
         Feed tvFeed = switch(args) {
             case List<String> l when l.isEmpty()             -> Feed.featuredGame(consumer);
-            case List<String> l when l.contains("classical") -> Feed.classical(consumer);
-            case List<String> l when l.contains("rapid")     -> Feed.rapid(consumer);
-            case List<String> l when l.contains("blitz")     -> Feed.blitz(consumer);
+            case List<String> l when l.contains("classical") -> Feed.featuredGame(consumer, Channel.classical);
+            case List<String> l when l.contains("rapid")     -> Feed.featuredGame(consumer, Channel.rapid);
+            case List<String> l when l.contains("blitz")     -> Feed.featuredGame(consumer, Channel.blitz);
             case List<String> l                              -> Feed.gameId(l.get(0), consumer);
         };
 

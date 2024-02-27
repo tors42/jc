@@ -4,32 +4,37 @@ import jc.model.JCState;
 import jc.model.JCState.*;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.*;
 import java.util.stream.*;
 
 import chariot.Client;
 import chariot.model.*;
 import chariot.model.MoveInfo.*;
-import chariot.model.TVChannels.TVChannel;
 import chariot.model.TVFeedEvent.*;
 import chariot.util.Board;
 import chariot.model.Enums.Color;
 
 public interface Feed {
 
-    static Client client = Client.basic();
+    static Client client = Client.basic(c -> c.api("http://localhost:8080"));
 
     static Feed featuredGame(Consumer<JCState> consumer) {
+        return featuredGame(consumer, client.games().tvFeed().stream());
+    }
+
+    static Feed featuredGame(Consumer<JCState> consumer, Enums.Channel channel) {
+        return featuredGame(consumer, client.games().tvFeed(channel).stream());
+    }
+
+    static Feed featuredGame(Consumer<JCState> consumer, Stream<TVFeedEvent> tvFeed) {
         // Eternal stream of games
-        Stream<FeedEvent> streamFromFeed = client.games().tvFeed().stream()
+        Stream<FeedEvent> streamFromFeed = tvFeed
             .map(tvFeedEvent -> switch(tvFeedEvent) {
                 case Fen(String fen, var lm, var wc, var bc)
                     -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
-                case Featured(var id, Color orientation, var players, String fen)
+                case Featured(var __, Color orientation, var players, String fen)
                     -> new JCNewGame(players.stream().map(Feed::fromPlayerInfo).toList(),
                             Board.fromFEN(fen),
                             orientation != Color.white);
@@ -55,22 +60,6 @@ public interface Feed {
             });
 
         return streamFromGameId;
-    }
-
-    record GameAndUser(String gameId, String userId) {
-        public GameAndUser(TVChannel channel) {
-            this(channel.gameId(), channel.user().id());
-        }
-    }
-
-    static Feed classical(Consumer<JCState> consumer) { return resubscribingGameId(() -> new GameAndUser(tvChannels().classical()), consumer); }
-    static Feed rapid(Consumer<JCState> consumer)     { return resubscribingGameId(() -> new GameAndUser(tvChannels().rapid()), consumer); }
-    static Feed blitz(Consumer<JCState> consumer)     { return resubscribingGameId(() -> new GameAndUser(tvChannels().blitz()), consumer); }
-
-    private static Feed resubscribingGameId(Supplier<GameAndUser> gameIdProvider, Consumer<JCState> consumer) {
-        // Synthetic eternal stream of games
-        Stream<FeedEvent> resubscribingStream = StreamSupport.stream(new FeedEventSpliterator(gameIdProvider), false);
-        return watch(consumer, resubscribingStream);
     }
 
     private static Feed watch(Consumer<JCState> consumer, Stream<FeedEvent> stream) {
@@ -122,46 +111,6 @@ public interface Feed {
         }
     }
 
-    class FeedEventSpliterator implements Spliterator<FeedEvent> {
-        final Supplier<GameAndUser> gameIdProvider;
-        Instant previousQuery = null;
-        Iterator<FeedEvent> iterator = Stream.<FeedEvent>of().iterator();
-
-        FeedEventSpliterator(Supplier<GameAndUser> gameIdProvider) {
-            this.gameIdProvider = gameIdProvider;
-        }
-
-        @Override
-        public boolean tryAdvance(Consumer<? super FeedEvent> action) {
-            if (iterator.hasNext()) {
-                action.accept(iterator.next());
-            } else {
-                if (previousQuery != null && Duration.between(previousQuery, Instant.now()).toSeconds() < 10) {
-                    try {TimeUnit.SECONDS.sleep(10); } catch (InterruptedException ie) {}
-                }
-                var gameAndUser = gameIdProvider.get();
-                previousQuery = Instant.now();
-                var gameOngoingSignal = new AtomicBoolean(true);
-                Thread.ofPlatform().name("game-over-listener").start(() -> {
-                    var result = client.games().gameInfosByGameIds("jc", gameAndUser.gameId());
-                    var stream = result.stream();
-                    stream.takeWhile(gameInfo -> gameInfo.status() <= 20).forEach(__ -> {});
-                    stream.close();
-                    gameOngoingSignal.set(false);
-                });
-
-                iterator = streamFromGameId(gameAndUser.gameId(), gameAndUser.userId())
-                    .takeWhile(__ -> gameOngoingSignal.get())
-                    .iterator();
-            }
-            return true;
-        }
-
-        @Override public Spliterator<FeedEvent> trySplit() { return null; }
-        @Override public long estimateSize() { return Long.MAX_VALUE; }
-        @Override public int characteristics() { return ORDERED; }
-    }
-
     void stop();
 
     sealed interface FeedEvent {}
@@ -183,10 +132,6 @@ public interface Feed {
     record JCBoardUpdate(Board board, Duration whiteTime, Duration blackTime, String lm) implements FeedEvent {};
     record JCTimeTick() implements FeedEvent {};
 
-    private static TVChannels tvChannels() {
-        return client.games().tvChannels().get();
-    }
-
     private static JCPlayerInfo fromPlayerInfo(PlayerInfo playerInfo) {
         JCUser user = new JCUser(playerInfo.user().name(), playerInfo.user().titleOpt().orElse(""));
         return new JCPlayerInfo(user, playerInfo.time(), playerInfo.color());
@@ -194,12 +139,12 @@ public interface Feed {
 
     private static JCPlayerInfo fromPlayer(Color color, Player player) {
         return fromPlayerInfo(switch(player) {
-            case Player.Account account ->
+            case Player.Account(var user, var rating, var __, var ___, var ____) ->
                 new PlayerInfo(UserInfo.of(
-                            account.user().id(),
-                            account.user().name(),
-                            account.user().title().orElse(null)),
-                        color, account.rating(), Duration.ZERO);
+                            user.id(),
+                            user.name(),
+                            user.title().orElse(null)),
+                        color, rating, Duration.ZERO);
             default ->
                 new PlayerInfo(
                         UserInfo.of("", player.name()),

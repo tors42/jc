@@ -13,7 +13,6 @@ import chariot.*;
 import chariot.model.*;
 import chariot.model.Event.*;
 import chariot.model.GameStateEvent.Soon;
-import chariot.model.Enums.*;
 import chariot.model.Enums.Color;
 import chariot.util.Board;
 import jc.model.JCState;
@@ -123,7 +122,7 @@ public interface Play {
             buttonPanel.add(exit);
 
             resign.addActionListener(event -> client.board().resign(game.gameId()));
-            draw.addActionListener(event -> client.board().handleDrawOffer(game.gameId(), Offer.yes));
+            draw.addActionListener(event -> client.board().handleDrawOffer(game.gameId(), false));
             exit.addActionListener(event -> {
                 resign.doClick();
                 stop();
