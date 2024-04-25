@@ -18,7 +18,7 @@ import chariot.model.Enums.Color;
 
 public interface Feed {
 
-    static Client client = Client.basic(c -> c.api("http://localhost:8080"));
+    static Client client = Client.basic();
 
     static Feed featuredGame(Consumer<JCState> consumer) {
         return featuredGame(consumer, client.games().tvFeed().stream());
