@@ -10,7 +10,7 @@
         <dependency>
             <groupId>io.github.tors42</groupId>
             <artifactId>chariot</artifactId>
-            <version>0.0.86</version>
+            <version>0.1.0</version>
         </dependency>
     </dependencies>
 
@@ -24,7 +24,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.11.0</version>
+                <version>3.13.0</version>
             </plugin>
             <!--
             -->
