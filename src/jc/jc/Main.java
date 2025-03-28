@@ -24,13 +24,14 @@ class Main {
     static void watch(List<String> args) {
         Consumer<JCState> consumer = state -> System.out.println(JCState.render(state));
 
-        Feed tvFeed = switch(args) {
-            case List<String> l when l.isEmpty()             -> Feed.featuredGame(consumer);
-            case List<String> l when l.contains("classical") -> Feed.featuredGame(consumer, Channel.classical);
-            case List<String> l when l.contains("rapid")     -> Feed.featuredGame(consumer, Channel.rapid);
-            case List<String> l when l.contains("blitz")     -> Feed.featuredGame(consumer, Channel.blitz);
-            case List<String> l                              -> Feed.gameId(l.get(0), consumer);
-        };
+        Feed tvFeed = args.isEmpty()
+            ? Feed.featuredGame(consumer)
+            : switch(args.getFirst()) {
+                case "classical" -> Feed.featuredGame(consumer, Channel.classical);
+                case "rapid" -> Feed.featuredGame(consumer, Channel.rapid);
+                case "blitz" -> Feed.featuredGame(consumer, Channel.blitz);
+                case String gameId -> Feed.gameId(gameId, consumer);
+            };
 
         System.console().readLine();
         tvFeed.stop();

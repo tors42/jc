@@ -34,7 +34,7 @@ public interface Feed {
             .map(tvFeedEvent -> switch(tvFeedEvent) {
                 case Fen(String fen, var lm, var wc, var bc)
                     -> new JCBoardUpdate(Board.fromFEN(fen), wc, bc, lm);
-                case Featured(var __, Color orientation, var players, String fen)
+                case Featured(_, Color orientation, var players, String fen)
                     -> new JCNewGame(players.stream().map(Feed::fromPlayerInfo).toList(),
                             Board.fromFEN(fen),
                             orientation != Color.white);
@@ -139,7 +139,7 @@ public interface Feed {
 
     private static JCPlayerInfo fromPlayer(Color color, Player player) {
         return fromPlayerInfo(switch(player) {
-            case Player.Account(var user, var rating, var __, var ___, var ____) ->
+            case Player.Account(var user, var rating, _, _, _) ->
                 new PlayerInfo(UserInfo.of(
                             user.id(),
                             user.name(),

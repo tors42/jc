@@ -12,7 +12,6 @@ import java.time.Duration;
 import chariot.*;
 import chariot.model.*;
 import chariot.model.Event.*;
-import chariot.model.GameStateEvent.Soon;
 import chariot.model.Enums.Color;
 import chariot.util.Board;
 import jc.model.JCState;
@@ -24,7 +23,7 @@ public interface Play {
 
     static Play casual15m10s() {
 
-        if (! (initializeClient() instanceof Some<ClientAuth>(ClientAuth client))) return dummy;
+        if (! (initializeClient() instanceof Some(ClientAuth client))) return dummy;
 
         // Connnect to Lichess so we can receive events.
         // If someone accepts the "seek" we are about to send to Lichess,
@@ -34,12 +33,12 @@ public interface Play {
         executor.submit(() -> {
             events.forEach(event -> {
                 switch(event) {
-                    case GameStartEvent(var game, var __) -> {
+                    case GameStartEvent(var game, _) -> {
                         var gameHandler = new GameHandler(client, game);
                         games.put(game.gameId(), gameHandler);
                         gameHandler.start();
                     }
-                    case GameStopEvent(var game, var __, var ___) -> {
+                    case GameStopEvent(var game, _, _) -> {
                         var gameHandler = games.remove(game.gameId());
                         if (gameHandler != null) gameHandler.stop();
                     }
@@ -53,11 +52,10 @@ public interface Play {
 
             public void startSeek() {
                 closeToStopCurrentSeek.close();
-                var seek = client.board().seekRealTime(params -> params
+                closeToStopCurrentSeek = client.board().seekRealTime(params -> params
                         .clockRapid15m10s()
                         .rated(false)
-                        );
-                closeToStopCurrentSeek = seek.stream();
+                        ).stream();
             }
 
             @Override
@@ -65,14 +63,17 @@ public interface Play {
                 events.close();
                 closeToStopCurrentSeek.close();
                 executor.shutdownNow();
-
             }
         };
     }
 
     sealed interface PlayEvent {}
     record NewGame(JCUser white, JCUser black, Duration intitial, Board board, boolean flipped) implements PlayEvent {};
-    record BoardUpdate(Board board, Duration whiteTime, Duration blackTime) implements PlayEvent {};
+    record BoardUpdate(Board board, Duration whiteTime, Duration blackTime) implements PlayEvent {
+        public BoardUpdate(Board board, Duration time) {
+            this(board, time, time);
+        }
+    };
     record TimeTick() implements PlayEvent {};
     record Chat(String from, String text, String room) implements PlayEvent {};
     record Gone(boolean gone, Opt<Integer> secondsUntilClaimable) implements PlayEvent {};
@@ -111,7 +112,7 @@ public interface Play {
             panel.add(buttonPanel, BorderLayout.NORTH);
             panel.add(textField, BorderLayout.SOUTH);
 
-            textField.addActionListener(event -> {
+            textField.addActionListener(_ -> {
                 String move = textField.getText();
                 client.board().move(game.gameId(), move);
                 SwingUtilities.invokeLater(() -> textField.setText(""));
@@ -121,9 +122,9 @@ public interface Play {
             buttonPanel.add(draw);
             buttonPanel.add(exit);
 
-            resign.addActionListener(event -> client.board().resign(game.gameId()));
-            draw.addActionListener(event -> client.board().handleDrawOffer(game.gameId(), false));
-            exit.addActionListener(event -> {
+            resign.addActionListener(_ -> client.board().resign(game.gameId()));
+            draw.addActionListener(_ -> client.board().handleDrawOffer(game.gameId(), false));
+            exit.addActionListener(_ -> {
                 resign.doClick();
                 stop();
                 dispose();
@@ -133,8 +134,8 @@ public interface Play {
             setVisible(true);
 
             me = switch(client.account().profile()) {
-                case Entry<UserAuth>(UserAuth profile) -> new JCUser(profile.name(), profile.title().orElse(""));
-                default                                -> new JCUser("Me", "");
+                case Entry(UserAuth profile) -> new JCUser(profile.name(), profile.title().orElse(""));
+                default                      -> new JCUser("Me", "");
             };
 
             var opponent = new JCUser(game.opponent().name(), "");
@@ -156,26 +157,27 @@ public interface Play {
                     0, 1, TimeUnit.SECONDS);
 
             stream = client.board().connectToGame(game.gameId()).stream()
-                .map(event -> switch(event) {
-                    case GameStateEvent.Full full ->
-                        new BoardUpdate(
-                                full.gameType().variant() instanceof VariantType.FromPosition fromPosition
-                                && fromPosition.fen() instanceof Some<String>(String fen)
-                                ? Board.fromFEN(fen)
-                                : Board.fromStandardPosition(),
-                                full.gameType().timeControl() instanceof RealTime real
-                                ? real.initial()
-                                : Duration.ZERO,
-                                full.gameType().timeControl() instanceof RealTime real
-                                ? real.initial()
-                                : Duration.ZERO);
-
+                .map(event -> (PlayEvent) switch(event) {
+                    case GameStateEvent.Full full -> new BoardUpdate(
+                            switch(full.gameType().variant()) {
+                                case Variant.FromPosition(Some(String fen), _) -> Board.fromFEN(fen);
+                                default -> Board.fromStandardPosition();
+                            },
+                            switch(full.gameType().timeControl()) {
+                                case RealTime real -> real.initial();
+                                default -> Duration.ZERO;
+                            });
                     case GameStateEvent.State state -> new BoardUpdate(
                             Board.fromFEN(game.fen()).play(state.moves()),
                             state.wtime(),
                             state.btime());
                     case GameStateEvent.Chat(String username, String text, String room) -> new Chat(username, text, room);
-                    case GameStateEvent.OpponentGone gone -> new Gone(gone.gone(), gone.claimable() instanceof Soon(Duration time) ? Opt.of((int)time.toSeconds()) : gone.canClaim() ? Opt.of(0) : Opt.of(-1));
+                    case GameStateEvent.OpponentGone gone -> new Gone(gone.gone(),
+                            switch(gone.claimable()) {
+                                case GameStateEvent.Soon(Duration time) -> Opt.of((int) time.toSeconds());
+                                case GameStateEvent.Yes() -> Opt.of(0);
+                                case GameStateEvent.No() -> Opt.empty();
+                            });
                 });
 
             executor.submit(() -> stream.forEach(queue::offer));
@@ -203,8 +205,8 @@ public interface Play {
                             .withWhiteTime(whiteTime)
                             .withBlackTime(blackTime);
                         case TimeTick() -> currentState.withOneSecondTick();
-                        case Chat chat  -> currentState;
-                        case Gone gone  -> currentState;
+                        case Chat _  -> currentState;
+                        case Gone _  -> currentState;
                     };
 
                     String board = JCState.render(currentState);
@@ -257,10 +259,7 @@ public interface Play {
         return Preferences.userRoot().node("jc");
     }
 
-
-
     default void startSeek() {}
     default void stop() {};
     static Play dummy = new Play(){};
-
 }
