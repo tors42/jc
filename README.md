@@ -5,7 +5,7 @@ A demo application for the [chariot](https://github.com/tors42/chariot) library.
 
 # Build
 
-Uses Maven and Java 19
+Uses Maven and Java 24
 
     $ mvn clean install
 
@@ -38,13 +38,13 @@ In default mode, **jc** continuously writes a text board of the featured Lichess
 
 Run with
 
-    $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar
+    $ java -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar
 
 The above command shows the featured TV game.
 
 Specify "classical", "rapid" or "blitz" to watch that TV channel, or a game id to watch that game.
 
-    $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar blitz
+    $ java -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar blitz
 
 ## Play
 
@@ -54,11 +54,11 @@ You can either use OAuth2 PKCE or a [Personal Access Token](https://lichess.org/
 
 To run with OAuth2 PKCE,
 
-    $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar play
+    $ java -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar play
 
 
 To run with a pre-created token,
 
     $ export LICHESS_TOKEN=lip_...
-    $ java --enable-preview -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar play
+    $ java -jar target/jc-0.0.1-SNAPSHOT-jar-with-dependencies.jar play
 
